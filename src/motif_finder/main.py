@@ -73,6 +73,11 @@ class Song(object):
     prime_notes_data: dict[str, list[list[list[SimpleNotePrime]]]]  #All prime note combinations, grouped by chord
     sky_simple_notes_data: dict[str, list[SimpleNote]]  #Skyline notes without rests
     sky_prime_notes_data: dict[str, list[SimpleNotePrime]]  #Skyline prime notes without rests
+    
+    def get_parts_list(self):
+        return list(self.original_notes_data.keys())
+    
+    
 
 
 # Marks a phrase's start position in terms of song name, part name, measure, and note index of measure
@@ -127,6 +132,9 @@ class PhraseGroup(object):
 # Global Variables
 song_dict: dict[str, Song] = {}
 phrase_group_list: list[PhraseGroup] = []
+
+# Parameters
+min_motif_length: int = 5
 
 
 def midi_to_measures(midi_path: str):
@@ -310,7 +318,7 @@ def find_prime(current_note: SimpleNote, next_note: SimpleNote):
     p1 = pitch.Pitch(current_note.pitch)
     p2 = pitch.Pitch(next_note.pitch)
     a_interval = interval.Interval(pitchStart=p1, pitchEnd=p2)
-    generic_interval = a_interval.generic.directed
+    generic_interval = a_interval
     
     # Uses IOI if available. If not (because the note is at the end of the sequence), use its duration instead
     current_duration = current_note.interonset_interval if current_note.interonset_interval is not None else current_note.duration
@@ -390,7 +398,7 @@ def find_note_list_by_measure_range(simple_note_lists: list[list[SimpleNote]], m
 # Identify if a given leitmotif is in a song and where
 # Note: Song is provided as a single list of SimpleNotePrime objects (analyzing regardless of measures)
 # To-fix: Function doesn't take into account uneven chords
-def query_leitmotif(query_phrase_group: PhraseGroup, current_song: Song):
+def query_exact_leitmotif(query_phrase_group: PhraseGroup, current_song: Song):
     query = query_phrase_group.get_original_phrase().prime_notes
     found_query = False
     
@@ -440,6 +448,10 @@ def query_leitmotif(query_phrase_group: PhraseGroup, current_song: Song):
             note_part_index += 1
             
     return found_query
+
+
+
+
             
             
 def create_song_object(midi_filepath: str, song_name:str, song_index: int):
@@ -497,11 +509,27 @@ def test_phrase_group():
     music_string = MusicPhrase(motif_sequence, 1, [phrase_position])
     phrase_group = PhraseGroup([music_string])
     
-    query_leitmotif(phrase_group, song)
+    query_exact_leitmotif(phrase_group, song)
     
-    print(phrase_group.__repr__())
+    # print(phrase_group.__repr__())
+    # print(song.simple_notes_data.__repr__())
+    # print(song.prime_notes_data.__repr__())
+    
+def test_song():
+    midi_filepath = "../../Deltarune - My Castle Town.mid"
+    song_name = "My Castle Town"
+    song_index = 0
+    
+    song = create_song_object(midi_filepath, song_name, song_index)
 
-
+    part = song.get_parts_list()[0]
+    #21-24 and 29-31
+    test1 = [x for x in song.sky_simple_notes_data[part] if 21 <= x.measure_number <= 24]
+    test2 = [x for x in song.sky_prime_notes_data[part] if 21 <= x.measure_number <= 24]
+    print_sky_notes(test1)
+    print("")
+    print_sky_notes(test2)
+    
 
 def note_to_string(general_note: GeneralNote):
     txt = ""
@@ -522,21 +550,26 @@ def note_to_string(general_note: GeneralNote):
         
     return txt
     
-def print_notes(midi_data: dict[str, list[Measure]]):
+def print_midi_data(midi_data: dict[str, list[Measure]]):
     for track, measures in midi_data.items():
         print(track)
         for measure_number, measure in enumerate(measures):
             print("Measure: " + (measure_number + 1).__str__())
             for index, note in enumerate(measure.notesAndRests):
                 print(index.__str__() + " " + note_to_string(note))
-                
-def print_prime_notes(simple_midi_prime_data: Dict[str, list[list[SimpleNotePrime]]]):
-    for track, note_prime_lists in simple_midi_prime_data.items():
-        print(track)
-        for measure_number, note_prime_list in enumerate(note_prime_lists):
-            print("Measure: " + measure_number.__str__())
-            for index, note_prime in enumerate(note_prime_list):
-                print(index.__str__() + " " + note_prime.__str__())
+            
+def print_sky_notes(sky_notes: list[SimpleNote] | list[SimpleNotePrime]):
+    for index, sky_note in enumerate(sky_notes):
+        print(index.__str__() + " " + sky_note.__str__())
+            
+def print_simple_notes(simple_notes: list[list[SimpleNote]]):
+    for simple_note_chord in simple_notes:
+        print(simple_note_chord.__repr__())
+        
+def print_prime_notes(prime_notes: list[list[list[SimpleNotePrime]]]):
+    for chord_combinations in prime_notes:
+        for note_combinations in chord_combinations:
+            print(note_combinations.__repr__())
                 
                 
 def plot_colored_grid(data, song_name, part_name):
@@ -551,7 +584,7 @@ def plot_colored_grid(data, song_name, part_name):
     
     
     
-def process_midi_file(midi_filepath: str, song_name:str, song_index: int):
+def process_midi_file(midi_filepath: str, song_name: str, song_index: int):
     # Create song object
     song = create_song_object(midi_filepath, song_name, song_index)
     
@@ -590,7 +623,7 @@ def process_midi_file(midi_filepath: str, song_name:str, song_index: int):
 def print_midi_file():
     midi_filepath = "../../Hollow Knight Main Theme.mid"
     midi_data = midi_to_measures(midi_filepath)
-    print_notes(midi_data)
+    print_midi_data(midi_data)
 
 
 def test_single_file():
@@ -647,7 +680,7 @@ if __name__ == "__main__":
     # Separate Tests
     # print_midi_file()
     
-    test_phrase_group()
+    test_song()
     
     # test_single_file()
     # test_multiple_files()

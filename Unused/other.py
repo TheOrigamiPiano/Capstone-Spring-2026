@@ -214,3 +214,20 @@ def add_to_phrase_dictionary(phrase_dictionary: Dict[int, PhraseGroup], song_ind
 						
 						phrase_dictionary[new_int_key] = new_phrase_group
 
+
+# Assumes exactness was already checked for
+def check_insertion(query_note: SimpleNotePrime, current_chord_combinations: list[list[SimpleNotePrime]],
+					next_chord_combinations: list[list[SimpleNotePrime]]):
+	# Pitch
+	possible_insertion_paths = list[(int, int)]
+	for note_chord_index, current_note_combinations in enumerate(current_chord_combinations):
+		for next_note_chord_index, current_note_combination in enumerate(current_note_combinations):
+			interval = current_note_combination.generic_interval
+			for next_note_combination in next_chord_combinations[next_note_chord_index]:
+				interval += next_note_combination.generic_interval
+
+# def check_deletion():
+#
+# def check_translation():
+#
+# def check_exact():
