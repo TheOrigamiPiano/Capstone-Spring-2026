@@ -117,7 +117,7 @@ def add_to_phrase_dictionary(phrase_dictionary: Dict[int, PhraseGroup], song_ind
 					
 					for int_key, phrase_group in phrase_dictionary.items():
 						phrase_key = phrase_group.phrase_key
-						music_string_list = phrase_group.music_string_list
+						music_string_list = phrase_group.music_phrase_list
 						
 						# Look for matches within the same song
 						if phrase_key.song_names.__contains__(song_name):

@@ -1,12 +1,18 @@
-from main import SimpleNote
+from main import SimpleNote, MusicPhrase
 from main import SimpleNotePrime
 from main import PhraseGroup
 from main import PhrasePosition
 from main import Song
 import numpy as np
 
+similarity_threshold = 0.75
+# Each test sequence will be 1.5x bigger than the query for efficiency.
+# Similarity ratio will still be based on the query length
+phrase_length_difference = 1.5
+
 # Uses the Smith-Waterman algorithm on two SimpleNotePrime lists
-# Returns a similarity value as a percentage of the resulting score and the max possible score
+# Returns a similarity value as a percentage of the resulting score and the max possible score, as well as both of the
+# identified matching phrases
 # Currently only measures pitch
 def smith_waterman_compare(query: list[SimpleNotePrime], sequence: list[SimpleNotePrime]):
 	# To-do: Add test cases that prematurely end compare
@@ -49,9 +55,18 @@ def smith_waterman_compare(query: list[SimpleNotePrime], sequence: list[SimpleNo
 			# If cell_value is 0, leave it empty
 				
 	# Retrace path
+	last_sequence_position = j
 	i, j = max_value_position
+	query_pattern = []
+	sequence_pattern = []
 	while scoring_matrix[i, j] != 0:
+		query_pattern.insert(0, query[i])
+		sequence_pattern.insert(0, sequence[j])
 		i, j = traceback_matrix[i, j]
+	
+	# Return ratio of max_value to the highest possible score (3 * the maximum length of most similar segments)
+	similarity = max_value / (3*len(query))
+	return similarity, sequence_pattern, last_sequence_position
 			
 	
 def find_sub_matrix_value(interval_1: int, interval_2: int):
@@ -62,54 +77,84 @@ def find_sub_matrix_value(interval_1: int, interval_2: int):
 
 
 # Should have a "tolerance level" for how much a phrase can deviate before quitting the search
-# [Under Construction]
-def query_similar_leitmotif(query_phrase_group: PhraseGroup, current_song: Song):
+def query_similar_skyline_leitmotif(query_phrase_group: PhraseGroup, current_song: Song):
 	query = query_phrase_group.get_original_phrase().prime_notes
 	found_query = False
+	sequence_length = int(len(query)*phrase_length_difference)  #int() to round down
+	skip_length = sequence_length - len(query)
 	
-	for part_name, simple_note_primes in current_song.prime_notes_data.items():
+	for part_name, simple_note_primes in current_song.sky_prime_notes_data.items():
 		note_part_index = 0
 		
-		while note_part_index < (len(simple_note_primes) - len(query)):
-			query_index = 0
-			
-			# First checks if a chord contains the query's first note
-			# After that, checks if the associated next note follows the query sequence
-			follow_note = True
-			next_note_index: int | None = None
-			while query_index < len(query) and follow_note:
-				follow_note = False
-				chord_combinations = simple_note_primes[note_part_index + query_index]
-				if next_note_index is None:
-					for note_combinations in chord_combinations:
-						for note_combination in note_combinations:
-							if query[query_index].compare_note(note_combination):
-								follow_note = True
-								next_note_index = note_combinations.index(note_combination)
-				else:
-					for note_combination in chord_combinations[next_note_index]:
-						if query[query_index].compare_note(note_combination):
-							follow_note = True
-							next_note_index = chord_combinations[next_note_index].index(note_combination)
-				
-				query_index += 1
+		while note_part_index < (len(simple_note_primes) - sequence_length):
+			sequence = simple_note_primes[note_part_index:note_part_index + sequence_length]
+			similarity, sequence_pattern, last_sequence_position = smith_waterman_compare(query, sequence)
 			
 			# Found a match to the query
-			if query_index == len(query):
+			if similarity > similarity_threshold:
 				found_query = True
 				
 				# Create new PhrasePosition
-				start_note = simple_note_primes[note_part_index][0][0]
+				start_note = simple_note_primes[note_part_index]
 				new_phrase_position = PhrasePosition(current_song.song_name, part_name, start_note.measure_number,
 													 start_note.note_measure_index)
 				
-				# Update phrase group (unless new_phrase_position is already present)
-				if new_phrase_position not in query_phrase_group.get_original_phrase().positions:
-					query_phrase_group.get_original_phrase().update(new_phrase_position)
+				phrase_updated = False
+				for phrase in query_phrase_group.music_phrase_list:
+					#Quit if this phrase was already present
+					if new_phrase_position in phrase.positions:
+						phrase_updated = True
+						break
+					#Update phrase if it already exists
+					elif phrase.prime_notes == sequence_pattern:
+						phrase_updated = True
+						phrase.update(new_phrase_position)
+					
+				#If phrase is not already in phrase_group, create a new MusicPhrase object
+				if not phrase_updated:
+					new_music_phrase = MusicPhrase(sequence_pattern, 1, [new_phrase_position])
+					query_phrase_group.add(new_music_phrase)
 				
 				# Increment note index past successful query
-				note_part_index += len(query)
+				note_part_index += last_sequence_position
 			
-			note_part_index += 1
+			note_part_index += skip_length
+			
+			#To-fix: Because of the skip_length, ensure one final check to ensure all
+			#data in the piece has been looked at
 	
 	return found_query
+
+
+
+
+# # Only returns similarity value
+# def smith_waterman_compare_simple(query: list[SimpleNotePrime], sequence: list[SimpleNotePrime]):
+# 	w1 = 2  # linear gap penalty
+#
+# 	# Add an empty object to beginning of the list for easier comparisons
+# 	empty = SimpleNotePrime()
+# 	query.insert(0, empty)
+# 	sequence.insert(0, empty)
+#
+# 	scoring_matrix = np.zeros((len(query), len(sequence)))
+# 	max_value: int = 0
+# 	max_value_position: tuple[int, int] = (0, 0)
+#
+# 	# Populate scoring matrix
+# 	for query_index in range(1, scoring_matrix.shape[0]):
+# 		for sequence_index in range(1, scoring_matrix.shape[1]):
+# 			match = find_sub_matrix_value(query[query_index].generic_interval,
+# 										  sequence[sequence_index].generic_interval)
+# 			delete = scoring_matrix[query_index - 1, sequence_index] - w1
+# 			insert = scoring_matrix[query_index, sequence_index - 1] - w1
+# 			cell_value = max(match, delete, insert, 0)
+# 			scoring_matrix[query_index, sequence_index] = cell_value
+#
+# 			# Update maximum value for easier traceback (repeat values override to get last occurring maximum)
+# 			if cell_value >= max_value:
+# 				max_value = cell_value
+# 				max_value_position = (query_index, sequence_index)
+#
+# 	# Return ratio of max_value to the highest possible score (3 * the maximum length of most similar segments)
+# 	return max_value / (3 * max(max_value_position))

@@ -107,18 +107,18 @@ class MusicPhrase(object):
 # A container for the music_string_list
 @dataclass
 class PhraseGroup(object):
-    music_string_list: list[MusicPhrase]
+    music_phrase_list: list[MusicPhrase]
     
     # Internal variables (don't need to be added with object instantiation)
     song_names: list[str]  #List of songs this phrase group appears in
     
     def __init__(self, music_string_list: list[MusicPhrase]):
-        self.music_string_list = music_string_list
+        self.music_phrase_list = music_string_list
         self.song_names = []
     
     # Always use this method to add a phrase to a phrase_group object
     def add(self, music_string: MusicPhrase):
-        self.music_string_list.append(music_string)
+        self.music_phrase_list.append(music_string)
         
         if music_string.get_first_position().song_name not in self.song_names:
             song_name = music_string.get_first_position().song_name
@@ -126,7 +126,7 @@ class PhraseGroup(object):
     
     # Original phrase is defined as the first time the phrase appears
     def get_original_phrase(self):
-        return self.music_string_list[0]
+        return self.music_phrase_list[0]
     
     
 # Global Variables
@@ -315,10 +315,9 @@ def simple_notes_to_prime_notes(simple_notes: list[list[SimpleNote]]):
     
         
 def find_prime(current_note: SimpleNote, next_note: SimpleNote):
-    p1 = pitch.Pitch(current_note.pitch)
-    p2 = pitch.Pitch(next_note.pitch)
-    a_interval = interval.Interval(pitchStart=p1, pitchEnd=p2)
-    generic_interval = a_interval
+    a_interval = interval.Interval(next_note.pitch - current_note.pitch)
+    #To-fix: Fix intervals to be only perfect, major, or minor
+    generic_interval = a_interval.generic.directed
     
     # Uses IOI if available. If not (because the note is at the end of the sequence), use its duration instead
     current_duration = current_note.interonset_interval if current_note.interonset_interval is not None else current_note.duration
