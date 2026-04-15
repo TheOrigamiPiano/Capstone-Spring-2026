@@ -21,20 +21,23 @@ def smith_waterman_compare(query: list[SimpleNotePrime], sequence: list[SimpleNo
 	
 	# Add an empty object to beginning of the list for easier comparisons
 	empty = SimpleNotePrime()
-	query.insert(0, empty)
-	sequence.insert(0, empty)
+	new_query = query.copy()
+	new_query.insert(0, empty)
+	new_sequence = sequence.copy()
+	new_sequence.insert(0, empty)
 	
-	scoring_matrix = np.zeros((len(query), len(sequence)))
+	scoring_matrix = np.zeros((len(new_query), len(new_sequence)))
 	max_value: int = 0
 	max_value_position: tuple[int, int] = (0, 0)
 	
 	# create another matrix to store which cell's value came from (mirrors the scoring matrix)
-	traceback_matrix = np.empty((len(query), len(sequence)))
+	traceback_matrix = np.full((len(new_query), len(new_sequence)), (0, 0), dtype=(int, 2))
 
 	# Populate scoring matrix
 	for query_index in range(1, scoring_matrix.shape[0]):
 		for sequence_index in range(1, scoring_matrix.shape[1]):
-			match = find_sub_matrix_value(query[query_index].generic_interval, sequence[sequence_index].generic_interval)
+			match = (scoring_matrix[query_index - 1, sequence_index - 1] +
+					 find_sub_matrix_value(new_query[query_index].generic_interval, new_sequence[sequence_index].generic_interval))
 			delete = scoring_matrix[query_index - 1, sequence_index] - w1
 			insert = scoring_matrix[query_index, sequence_index - 1] - w1
 			cell_value = max(match, delete, insert, 0)
@@ -52,22 +55,26 @@ def smith_waterman_compare(query: list[SimpleNotePrime], sequence: list[SimpleNo
 				traceback_matrix[query_index, sequence_index] = (query_index - 1, sequence_index)
 			elif cell_value == insert:
 				traceback_matrix[query_index, sequence_index] = (query_index, sequence_index - 1)
-			# If cell_value is 0, leave it empty
+				
 				
 	# Retrace path
-	last_sequence_position = j
 	i, j = max_value_position
+	last_sequence_position = j
 	query_pattern = []
 	sequence_pattern = []
 	while scoring_matrix[i, j] != 0:
-		query_pattern.insert(0, query[i])
-		sequence_pattern.insert(0, sequence[j])
+		query_pattern.insert(0, new_query[i])
+		sequence_pattern.insert(0, new_sequence[j])
 		i, j = traceback_matrix[i, j]
-	
+		
+	# print(scoring_matrix.__repr__())
+	# print(traceback_matrix.__repr__())
+
 	# Return ratio of max_value to the highest possible score (3 * the maximum length of most similar segments)
-	similarity = max_value / (3*len(query))
-	return similarity, sequence_pattern, last_sequence_position
-			
+	similarity = max_value / (3 * (len(new_query) - 1))
+	last_measure = new_sequence[last_sequence_position].measure_number
+	return similarity, sequence_pattern, last_measure
+	
 	
 def find_sub_matrix_value(interval_1: int, interval_2: int):
 	value = 3 - 2*abs(interval_1 - interval_2)
@@ -81,21 +88,27 @@ def query_similar_skyline_leitmotif(query_phrase_group: PhraseGroup, current_son
 	query = query_phrase_group.get_original_phrase().prime_notes
 	found_query = False
 	sequence_length = int(len(query)*phrase_length_difference)  #int() to round down
-	skip_length = sequence_length - len(query)
 	
-	for part_name, simple_note_primes in current_song.sky_prime_notes_data.items():
+	for part_name, sky_prime_notes in current_song.sky_prime_notes_data.items():
 		note_part_index = 0
+		song_iter = iter(sky_prime_notes)
+		next(song_iter)  #Start iterator on first note
+		current_measure = 1
 		
-		while note_part_index < (len(simple_note_primes) - sequence_length):
-			sequence = simple_note_primes[note_part_index:note_part_index + sequence_length]
-			similarity, sequence_pattern, last_sequence_position = smith_waterman_compare(query, sequence)
+		while note_part_index < (len(sky_prime_notes) - sequence_length):
+			sequence = sky_prime_notes[note_part_index:(note_part_index + sequence_length)]
+			# print(query.__repr__())
+			# print(sequence.__repr__())
+			# print(current_song.sky_simple_notes_data[part_name][note_part_index:(note_part_index + sequence_length)].__repr__())
+			similarity, sequence_pattern, last_measure = smith_waterman_compare(query, sequence)
+			# print(similarity)
 			
 			# Found a match to the query
 			if similarity > similarity_threshold:
 				found_query = True
 				
 				# Create new PhrasePosition
-				start_note = simple_note_primes[note_part_index]
+				start_note = sky_prime_notes[note_part_index]
 				new_phrase_position = PhrasePosition(current_song.song_name, part_name, start_note.measure_number,
 													 start_note.note_measure_index)
 				
@@ -115,10 +128,16 @@ def query_similar_skyline_leitmotif(query_phrase_group: PhraseGroup, current_son
 					new_music_phrase = MusicPhrase(sequence_pattern, 1, [new_phrase_position])
 					query_phrase_group.add(new_music_phrase)
 				
-				# Increment note index past successful query
-				note_part_index += last_sequence_position
+				# Increment note index to the start of the last measure found in sequence_pattern
+				current_measure = last_measure
 			
-			note_part_index += skip_length
+			# Otherwise, increment note index to the start of the next measure
+			else:
+				current_measure += 1
+			
+			while next(song_iter).measure_number < current_measure:
+				note_part_index += 1
+			note_part_index += 1
 			
 			#To-fix: Because of the skip_length, ensure one final check to ensure all
 			#data in the piece has been looked at
@@ -128,33 +147,3 @@ def query_similar_skyline_leitmotif(query_phrase_group: PhraseGroup, current_son
 
 
 
-# # Only returns similarity value
-# def smith_waterman_compare_simple(query: list[SimpleNotePrime], sequence: list[SimpleNotePrime]):
-# 	w1 = 2  # linear gap penalty
-#
-# 	# Add an empty object to beginning of the list for easier comparisons
-# 	empty = SimpleNotePrime()
-# 	query.insert(0, empty)
-# 	sequence.insert(0, empty)
-#
-# 	scoring_matrix = np.zeros((len(query), len(sequence)))
-# 	max_value: int = 0
-# 	max_value_position: tuple[int, int] = (0, 0)
-#
-# 	# Populate scoring matrix
-# 	for query_index in range(1, scoring_matrix.shape[0]):
-# 		for sequence_index in range(1, scoring_matrix.shape[1]):
-# 			match = find_sub_matrix_value(query[query_index].generic_interval,
-# 										  sequence[sequence_index].generic_interval)
-# 			delete = scoring_matrix[query_index - 1, sequence_index] - w1
-# 			insert = scoring_matrix[query_index, sequence_index - 1] - w1
-# 			cell_value = max(match, delete, insert, 0)
-# 			scoring_matrix[query_index, sequence_index] = cell_value
-#
-# 			# Update maximum value for easier traceback (repeat values override to get last occurring maximum)
-# 			if cell_value >= max_value:
-# 				max_value = cell_value
-# 				max_value_position = (query_index, sequence_index)
-#
-# 	# Return ratio of max_value to the highest possible score (3 * the maximum length of most similar segments)
-# 	return max_value / (3 * max(max_value_position))

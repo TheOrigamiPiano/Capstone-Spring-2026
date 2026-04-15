@@ -231,3 +231,61 @@ def check_insertion(query_note: SimpleNotePrime, current_chord_combinations: lis
 # def check_translation():
 #
 # def check_exact():
+
+# # Only returns similarity value
+# def smith_waterman_compare_simple(query: list[SimpleNotePrime], sequence: list[SimpleNotePrime]):
+# 	w1 = 2  # linear gap penalty
+#
+# 	# Add an empty object to beginning of the list for easier comparisons
+# 	empty = SimpleNotePrime()
+# 	query.insert(0, empty)
+# 	sequence.insert(0, empty)
+#
+# 	scoring_matrix = np.zeros((len(query), len(sequence)))
+# 	max_value: int = 0
+# 	max_value_position: tuple[int, int] = (0, 0)
+#
+# 	# Populate scoring matrix
+# 	for query_index in range(1, scoring_matrix.shape[0]):
+# 		for sequence_index in range(1, scoring_matrix.shape[1]):
+# 			match = find_sub_matrix_value(query[query_index].generic_interval,
+# 										  sequence[sequence_index].generic_interval)
+# 			delete = scoring_matrix[query_index - 1, sequence_index] - w1
+# 			insert = scoring_matrix[query_index, sequence_index - 1] - w1
+# 			cell_value = max(match, delete, insert, 0)
+# 			scoring_matrix[query_index, sequence_index] = cell_value
+#
+# 			# Update maximum value for easier traceback (repeat values override to get last occurring maximum)
+# 			if cell_value >= max_value:
+# 				max_value = cell_value
+# 				max_value_position = (query_index, sequence_index)
+#
+# 	# Return ratio of max_value to the highest possible score (3 * the maximum length of most similar segments)
+# 	return max_value / (3 * max(max_value_position))
+
+def process_phrase_dictionary():
+    # Create phrase Dictionary
+    #phrase_dictionary = create_phrase_dictionary()
+
+    # Setup up code to read each midi file for Super Mario Galaxy
+    folder_name = "MidiFiles/superMarioGalaxy"
+    game_name = "Super Mario Galaxy"
+
+    midi_files = []
+    for (dirpath, dirnames, filenames) in os.walk(folder_name):
+        midi_files.extend(filenames)
+
+    for temp_song_index, midi_file in enumerate(midi_files):
+
+        song_name = midi_file
+        simple_midi_data, lag_matrix_list = process_midi_file(folder_name + "/" + midi_file)
+
+        # values = list(simple_midi_data.values())
+        # for value in values:
+        #     print(len(value))
+
+        # add_to_phrase_dictionary(phrase_dictionary, temp_song_index, song_name, lag_matrix_list, simple_midi_data)
+
+    # json_str = json.dumps(phrase_dictionary, indent=4, cls=EnhancedJSONEncoder)
+    # with open("SuperMarioGalaxy.json", "w") as f:
+    #     f.write(json_str)

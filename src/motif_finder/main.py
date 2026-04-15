@@ -26,6 +26,8 @@ from numba.typed.dictobject import new_dict
 from scipy.signal import freqs
 
 
+
+
 # To-Do
 # - Create a test phrase group and supporting code
 
@@ -77,7 +79,25 @@ class Song(object):
     def get_parts_list(self):
         return list(self.original_notes_data.keys())
     
-    
+    def print_simple_notes_data(self):
+        for part_name, simple_notes_list in self.simple_notes_data.items():
+            print(part_name)
+            print_simple_notes(simple_notes_list)
+            
+    def print_prime_notes_data(self):
+        for part_name, prime_notes_list in self.prime_notes_data.items():
+            print(part_name)
+            print_prime_notes(prime_notes_list)
+            
+    def print_sky_simple_notes_data(self):
+        for part_name, sky_notes in self.sky_simple_notes_data.items():
+            print(part_name)
+            print_sky_notes(sky_notes)
+            
+    def print_sky_prime_notes_data(self):
+        for part_name, sky_notes in self.sky_prime_notes_data.items():
+            print(part_name)
+            print_sky_notes(sky_notes)
 
 
 # Marks a phrase's start position in terms of song name, part name, measure, and note index of measure
@@ -556,15 +576,18 @@ def print_midi_data(midi_data: dict[str, list[Measure]]):
             print("Measure: " + (measure_number + 1).__str__())
             for index, note in enumerate(measure.notesAndRests):
                 print(index.__str__() + " " + note_to_string(note))
-            
+
+
 def print_sky_notes(sky_notes: list[SimpleNote] | list[SimpleNotePrime]):
     for index, sky_note in enumerate(sky_notes):
         print(index.__str__() + " " + sky_note.__str__())
-            
+
+
 def print_simple_notes(simple_notes: list[list[SimpleNote]]):
     for simple_note_chord in simple_notes:
         print(simple_note_chord.__repr__())
-        
+
+
 def print_prime_notes(prime_notes: list[list[list[SimpleNotePrime]]]):
     for chord_combinations in prime_notes:
         for note_combinations in chord_combinations:
@@ -646,45 +669,10 @@ class EnhancedJSONEncoder(json.JSONEncoder):
             return dataclasses.asdict(o)
         return super().default(o)
         
-def process_phrase_dictionary():
-    # Create phrase Dictionary
-    #phrase_dictionary = create_phrase_dictionary()
 
-    # Setup up code to read each midi file for Super Mario Galaxy
-    folder_name = "MidiFiles/superMarioGalaxy"
-    game_name = "Super Mario Galaxy"
-
-    midi_files = []
-    for (dirpath, dirnames, filenames) in os.walk(folder_name):
-        midi_files.extend(filenames)
-
-    for temp_song_index, midi_file in enumerate(midi_files):
-
-        song_name = midi_file
-        simple_midi_data, lag_matrix_list = process_midi_file(folder_name + "/" + midi_file)
-
-        # values = list(simple_midi_data.values())
-        # for value in values:
-        #     print(len(value))
-
-        # add_to_phrase_dictionary(phrase_dictionary, temp_song_index, song_name, lag_matrix_list, simple_midi_data)
-
-    # json_str = json.dumps(phrase_dictionary, indent=4, cls=EnhancedJSONEncoder)
-    # with open("SuperMarioGalaxy.json", "w") as f:
-    #     f.write(json_str)
     
     
 
 if __name__ == "__main__":
-    # Separate Tests
-    # print_midi_file()
-    
-    test_song()
-    
-    # test_single_file()
-    # test_multiple_files()
-    
-    # process_phrase_dictionary()
-
-    # Print structured summary
-    # print_prime_notes(simple_midi_prime_data)
+    from src.motif_finder.tests import perform_all_tests
+    perform_all_tests()
