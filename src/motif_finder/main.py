@@ -29,14 +29,19 @@ from scipy.signal import freqs
 
 
 # To-Do
-# - Create a test phrase group and supporting code
+# - Add more midi files and tests (both self-compare and cross-compare)
+# - Fix skyline algorithm to properly differentiate single parts with multiple voices
+#   - Use Dark Sanctuary as a guide, since I think it pushes every rule for this function
+# - Fix query_similar_skyline_leitmotif() function to not identify only part of a motif and then skip over it
+#   - Possibly includes
+
+# Future Goals
+# - If the entire song repeats, cut it in half
+# - Create a script for automatically loading midi files into Musescore and re-downloading it (to fix formatting errors)
 
 # To-Review
 # - Review what objects are actually needed for the song class
-# - Review if I should remove the SimpleNote class and replace it with GeneralNote from Music21
 
-# To-Fix
-# -
 
 # Notes
 # - .exec method for running string as code
@@ -194,7 +199,7 @@ def midi_to_measures(midi_path: str):
             
         # Remake measures to account for new time signature
         part = part.makeMeasures()
-        
+
         part = part.stripTies()
         part = part.makeTies()
         
@@ -253,6 +258,10 @@ def measures_to_simple_notes(measures: list[Measure]):
                     tie_type = None
                 else:
                     tie_type = general_note.tie.type
+                    
+                # Temp: Ties seem to be broken in some midi files, so I'll try skipping all tie continuations.
+                # if tie_type.__eq__('Stop'):
+                #     continue
                 
                 # Get the highest pitch of chord or note
                 # At the same time, make a SimpleNote object for each pitch in a chord
@@ -399,7 +408,6 @@ def create_lag_matrix(boolean_ssm: list[list[bool]]):
                 break
     return lag_matrix
 
-#
 # def traverse_boolean_ssm(boolean_ssm: list[list[bool]]):
 
 
@@ -501,7 +509,7 @@ def create_song_object(midi_filepath: str, song_name:str, song_index: int):
             
 # Functions for testing
 def test_phrase_group():
-    midi_filepath = "../../Hollow Knight Main Theme.mid"
+    midi_filepath = "../../TestMidiFiles/Hollow Knight Main Theme.mid"
     song_name = "Hollow Knight Main Theme"
     song_index = 0
     
@@ -535,7 +543,7 @@ def test_phrase_group():
     # print(song.prime_notes_data.__repr__())
     
 def test_song():
-    midi_filepath = "../../Deltarune - My Castle Town.mid"
+    midi_filepath = "../../TestMidiFiles/Deltarune - My Castle Town.mid"
     song_name = "My Castle Town"
     song_index = 0
     
@@ -643,7 +651,7 @@ def process_midi_file(midi_filepath: str, song_name: str, song_index: int):
     #return simple_midi_data, lag_matrix_list
 
 def print_midi_file():
-    midi_filepath = "../../Hollow Knight Main Theme.mid"
+    midi_filepath = "../../TestMidiFiles/Hollow Knight Main Theme.mid"
     midi_data = midi_to_measures(midi_filepath)
     print_midi_data(midi_data)
 

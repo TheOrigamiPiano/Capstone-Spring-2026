@@ -6,13 +6,13 @@ from main import SimpleNote, MusicPhrase, create_song_object
 
 def perform_all_tests():
 	#Self-compare tests
-	self_compare_tests()
+	# self_compare_tests()
 	
 	# Cross-compare tests
 	cross_compare_tests()
 	
 	# Other
-	temp_test()
+	# temp_test()
 	
 	
 def perform_and_print_self_test(song: Song, part: str, measure_number: int, measure_note_index: int, query_size: int):
@@ -20,7 +20,9 @@ def perform_and_print_self_test(song: Song, part: str, measure_number: int, meas
 	query_similar_skyline_leitmotif(phrase_group, song)
 	
 	for music_phrase in phrase_group.music_phrase_list:
-		print(str(len(music_phrase.prime_notes)) + " " + music_phrase.__repr__())
+		# print(str(len(music_phrase.prime_notes)) + " " + music_phrase.__repr__())
+		# print(song.simple_notes_data)
+		print(str(len(music_phrase.prime_notes)) + " " + music_phrase.positions.__repr__())
 
 
 def perform_and_print_cross_test(query_song: Song, part: str, measure_number: int, measure_note_index: int,
@@ -29,7 +31,8 @@ def perform_and_print_cross_test(query_song: Song, part: str, measure_number: in
 	query_similar_skyline_leitmotif(query_phrase_group, target_song)
 	
 	for music_phrase in query_phrase_group.music_phrase_list:
-		print(str(len(music_phrase.prime_notes)) + " " + music_phrase.__repr__())
+		# print(str(len(music_phrase.prime_notes)) + " " + music_phrase.__repr__())
+		print(str(len(music_phrase.prime_notes)) + " " + music_phrase.positions.__repr__())
 
 
 def self_compare_tests():
@@ -37,46 +40,113 @@ def self_compare_tests():
 	# 1.1: Melody 1
 	print("1. My Castle Town (Deltarune)")
 	print("1.1")
-	midi_filepath = "../../Deltarune - My Castle Town.mid"
+	midi_filepath = "../../TestMidiFiles/Deltarune - My Castle Town.mid"
 	song_name = "My Castle Town"
 	song = create_song_object(midi_filepath, song_name, 0)
 	part = song.get_parts_list()[0]
 	
-	perform_and_print_self_test(song, part, 0, 0, 9 - 1)
+	perform_and_print_self_test(song, part, 1, 0, 9 - 1)
 	
 	# 1.2: Melody 2
 	print("\n1.2")
+	perform_and_print_self_test(song, part, 17, 0, 8 - 1)
 	
-	perform_and_print_self_test(song, part, 17, 0, 9 - 1)
+	# 2. Dark Sanctuary (Deltarune)
+	print("\n2. Dark Sanctuary (Deltarune)")
+	midi_filepath = "../../TestMidiFiles/Deltarune - Dark Sanctuary (v2).mid"
+	song_name = "Dark Sanctuary"
+	song = create_song_object(midi_filepath, song_name, 0)
+	part = song.get_parts_list()[0]
 	
-	# 2. Hollow Knight Main Theme
-	print("\n2. Hollow Knight Main Theme")
-	midi_filepath = "../../Hollow Knight Main Theme.mid"
+	perform_and_print_self_test(song, part, 17, 0, 11 - 1)
+	# Only finding the first half of the melody, so it might be able to find the similar patterns later
+	
+	# 3. Hollow Knight Main Theme
+	print("\n3. Hollow Knight Main Theme")
+	midi_filepath = "../../TestMidiFiles/Hollow Knight Main Theme.mid"
 	song_name = "Hollow Knight Main Theme"
 	song = create_song_object(midi_filepath, song_name, 0)
 	part = song.get_parts_list()[0]
 	
-	perform_and_print_self_test(song, part, 0, 0, 11 - 1)
+	perform_and_print_self_test(song, part, 1, 0, 11 - 1)
+	
+	# 4. Rosalina's Comet Observatory (Super Mario Galaxy)
+	print("\n4. Rosalina's Comet Observatory (Super Mario Galaxy)")
+	midi_filepath = "../../TestMidiFiles/Super Mario Galaxy - Rosalinas Comet Observatory 1 2 3.mid"
+	song_name = "Rosalina's Comet Observatory"
+	song = create_song_object(midi_filepath, song_name, 0)
+	part = song.get_parts_list()[0]
+	
+	perform_and_print_self_test(song, part, 9, 0, 11 - 1)
+	# Note, the main melody is a longer phrase, but I'm just finding the first quarter of it for simplicity.
+	
+	# 5. Bowser Choir (Super Mario Galaxy)
+	print("\n5. Bowser Choir (Super Mario Galaxy)")
+	midi_filepath = "../../TestMidiFiles/Super_Mario_Galaxy_Bowser_Choir_v3.mid"
+	song_name = "Bowser Choir"
+	song = create_song_object(midi_filepath, song_name, 0)
+	part = song.get_parts_list()[1]
+	
+	perform_and_print_self_test(song, part, 11, 0, 21 - 1)
+	
+	# 6. Toriel's Theme (Undertale)
+	print("\n6. Toriel's Theme (Undertale)")
+	midi_filepath = "../../TestMidiFiles/Undertale-Toriels_Theme_v2.mid"
+	song_name = "Toriel's Theme"
+	song = create_song_object(midi_filepath, song_name, 0)
+	part = song.get_parts_list()[0]
+	
+	perform_and_print_self_test(song, part, 1, 0, 44 - 1)
+	
+	# 7. White Palace (Hollow Knight)
+	print("\n7. White Palace (Hollow Knight)")
+	midi_filepath = "../../TestMidiFiles/White_Palace_Hollow_Knight_v2.mid"
+	song_name = "White Palace"
+	song = create_song_object(midi_filepath, song_name, 0)
+	part = song.get_parts_list()[1]
+	
+	perform_and_print_self_test(song, part, 17, 0, 10 - 1)
 	
 	
 def cross_compare_tests():
 	# 1. My Castle Town in Dark Sanctuary (Deltarune)
 	print("\n1. My Castle Town in Dark Sanctuary (Deltarune)")
 	query_song_name = "My Castle Town"
-	query_song = create_song_object("../../Deltarune - My Castle Town.mid", query_song_name, 0)
+	query_song = create_song_object("../../TestMidiFiles/Deltarune - My Castle Town.mid", query_song_name, 0)
 	part = query_song.get_parts_list()[0]
 	
 	target_song_name = "Dark Sanctuary"
-	target_song = create_song_object("../../Deltarune - Dark Sanctuary (v2).mid", target_song_name, 1)
-	
-	# target_song.print_simple_notes_data()
+	target_song = create_song_object("../../TestMidiFiles/Deltarune - Dark Sanctuary (v2).mid", target_song_name, 1)
 	
 	perform_and_print_cross_test(query_song, part, 17, 0, 9 - 1, target_song)
+	
+	# 2. Rosalina's Comet Observatory in Family (Super Mario Galaxy)
+	print("\n2. Rosalina's Comet Observatory in Family (Super Mario Galaxy)")
+	query_song_name = "Rosalina's Comet Observatory"
+	query_song = create_song_object("../../TestMidiFiles/Super Mario Galaxy - Rosalinas Comet Observatory 1 2 3.mid", query_song_name, 0)
+	part = query_song.get_parts_list()[0]
+	
+	target_song_name = "Family"
+	target_song = create_song_object("../../TestMidiFiles/Super Mario Galaxy - Family.mid", target_song_name, 1)
+	
+	perform_and_print_cross_test(query_song, part, 9, 0, 11 - 1, target_song)
+	
+	# 3. White Palace in Resting Grounds (Hollow Knight)
+	print("\n3. White Palace in Resting Grounds (Hollow Knight)")
+	query_song_name = "White Palace"
+	query_song = create_song_object("../../TestMidiFiles/White_Palace_Hollow_Knight_v2.mid",
+									query_song_name, 0)
+	part = query_song.get_parts_list()[1]
+	
+	target_song_name = "Resting Grounds"
+	target_song = create_song_object("../../TestMidiFiles/Hollow Knight - Resting Grounds.mid", target_song_name, 1)
+	
+	perform_and_print_cross_test(query_song, part, 17, 0, 4 - 1, target_song)
 	
 
 def temp_test():
 	query_song_name = "My Castle Town"
-	query_song = create_song_object("../../Deltarune - My Castle Town.mid", query_song_name, 0)
+	query_song = create_song_object("../../TestMidiFiles/Deltarune - My Castle Town.mid", query_song_name, 0)
 	part = next(iter(query_song.sky_prime_notes_data))
 	query_phrase_group = retrieve_phrase(query_song, part, 17, 0, 9 - 1)
 	
@@ -91,7 +161,7 @@ def temp_test():
 	test_sequence.append(SimpleNotePrime(3, 1, 52, 0))
 	test_sequence.append(SimpleNotePrime(2, 4, 52, 1))
 	
-	similarity, sequence_pattern, last_measure = smith_waterman_compare(
+	similarity, sequence_pattern, start_note_position, last_measure = smith_waterman_compare(
 		query_phrase_group.get_original_phrase().prime_notes, test_sequence)
 	print(similarity)
 
@@ -109,6 +179,8 @@ def retrieve_phrase(song: Song, part: str, measure: int, measure_note_index: int
 	start_index = initial_index + measure_note_index
 	start_note = song.sky_prime_notes_data[part][start_index]
 	motif_sequence = song.sky_prime_notes_data[part][start_index:start_index + query_size]
+	
+	# print(song.sky_simple_notes_data[part][start_index:start_index + query_size + 1])
 	
 	# Create relevant objects
 	phrase_position = PhrasePosition(song.song_name, part, start_note.measure_number,

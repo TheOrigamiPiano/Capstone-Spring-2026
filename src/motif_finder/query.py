@@ -66,6 +66,8 @@ def smith_waterman_compare(query: list[SimpleNotePrime], sequence: list[SimpleNo
 		query_pattern.insert(0, new_query[i])
 		sequence_pattern.insert(0, new_sequence[j])
 		i, j = traceback_matrix[i, j]
+	
+	start_note_position = j
 		
 	# print(scoring_matrix.__repr__())
 	# print(traceback_matrix.__repr__())
@@ -73,7 +75,7 @@ def smith_waterman_compare(query: list[SimpleNotePrime], sequence: list[SimpleNo
 	# Return ratio of max_value to the highest possible score (3 * the maximum length of most similar segments)
 	similarity = max_value / (3 * (len(new_query) - 1))
 	last_measure = new_sequence[last_sequence_position].measure_number
-	return similarity, sequence_pattern, last_measure
+	return similarity, sequence_pattern, start_note_position, last_measure
 	
 	
 def find_sub_matrix_value(interval_1: int, interval_2: int):
@@ -100,7 +102,7 @@ def query_similar_skyline_leitmotif(query_phrase_group: PhraseGroup, current_son
 			# print(query.__repr__())
 			# print(sequence.__repr__())
 			# print(current_song.sky_simple_notes_data[part_name][note_part_index:(note_part_index + sequence_length)].__repr__())
-			similarity, sequence_pattern, last_measure = smith_waterman_compare(query, sequence)
+			similarity, sequence_pattern, start_note_position, last_measure = smith_waterman_compare(query, sequence)
 			# print(similarity)
 			
 			# Found a match to the query
@@ -108,20 +110,22 @@ def query_similar_skyline_leitmotif(query_phrase_group: PhraseGroup, current_son
 				found_query = True
 				
 				# Create new PhrasePosition
-				start_note = sky_prime_notes[note_part_index]
+				start_note = sky_prime_notes[note_part_index + start_note_position]
 				new_phrase_position = PhrasePosition(current_song.song_name, part_name, start_note.measure_number,
 													 start_note.note_measure_index)
 				
 				phrase_updated = False
+				
+				# Quit if this phrase was already present
 				for phrase in query_phrase_group.music_phrase_list:
-					#Quit if this phrase was already present
 					if new_phrase_position in phrase.positions:
 						phrase_updated = True
 						break
-					#Update phrase if it already exists
-					elif phrase.prime_notes == sequence_pattern:
-						phrase_updated = True
-						phrase.update(new_phrase_position)
+				# Temp: For easier comparisons, don't update phrase groups
+				# 	#Update phrase if it already exists
+				# 	elif phrase.prime_notes == sequence_pattern:
+				# 		phrase_updated = True
+				# 		phrase.update(new_phrase_position)
 					
 				#If phrase is not already in phrase_group, create a new MusicPhrase object
 				if not phrase_updated:
@@ -135,8 +139,10 @@ def query_similar_skyline_leitmotif(query_phrase_group: PhraseGroup, current_son
 			else:
 				current_measure += 1
 			
-			while next(song_iter).measure_number < current_measure:
+			simple_note = next(song_iter)
+			while simple_note is not None and simple_note.measure_number < current_measure:
 				note_part_index += 1
+				simple_note = next(song_iter, None)
 			note_part_index += 1
 			
 			#To-fix: Because of the skip_length, ensure one final check to ensure all
