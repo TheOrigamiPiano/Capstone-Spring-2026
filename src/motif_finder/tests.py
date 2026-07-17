@@ -6,13 +6,24 @@ from main import SimpleNote, MusicPhrase, create_song_object
 
 def perform_all_tests():
 	#Self-compare tests
-	# self_compare_tests()
+	self_compare_tests()
 	
 	# Cross-compare tests
 	cross_compare_tests()
 	
 	# Other
 	# temp_test()
+
+def perform_single_test():
+	# 4. Rosalina's Comet Observatory (Super Mario Galaxy)
+	print("\n4. Rosalina's Comet Observatory (Super Mario Galaxy)")
+	midi_filepath = "../../TestMidiFiles/Super Mario Galaxy - Rosalinas Comet Observatory 1 2 3.mid"
+	song_name = "Rosalina's Comet Observatory"
+	song = create_song_object(midi_filepath, song_name, 0)
+	part = song.get_parts_list()[0]
+	
+	# With the extra measures caused by incorrect midi file, it starts on measure 12. The real measure is 9
+	perform_and_print_self_test(song, part, 9, 0, 11 - 1)
 	
 	
 def perform_and_print_self_test(song: Song, part: str, measure_number: int, measure_note_index: int, query_size: int):
@@ -21,7 +32,6 @@ def perform_and_print_self_test(song: Song, part: str, measure_number: int, meas
 	
 	for music_phrase in phrase_group.music_phrase_list:
 		# print(str(len(music_phrase.prime_notes)) + " " + music_phrase.__repr__())
-		# print(song.simple_notes_data)
 		print(str(len(music_phrase.prime_notes)) + " " + music_phrase.positions.__repr__())
 
 

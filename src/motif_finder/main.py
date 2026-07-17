@@ -8,12 +8,13 @@ from typing import Dict
 from xml.sax import default_parser_list
 
 import music21
-from music21 import converter, note, midi, duration, meter, interval, pitch
+from music21 import converter, note, midi, duration, meter, interval, pitch, chord
 from music21.interval import GenericInterval
 from music21.meter import TimeSignature
 from music21.midi import MidiFile
 from music21.note import GeneralNote
 from music21.stream import Measure, Score
+from music21.stream.iterator import StreamIterator
 from music21.stream.makeNotation import consolidateCompletedTuplets
 
 from librosa import segment
@@ -22,30 +23,50 @@ import matplotlib.pyplot as plt
 import matplotlib.colors
 
 import numpy as np
+from music21.tree.toStream import chordified
 from numba.typed.dictobject import new_dict
 from scipy.signal import freqs
 
-
-
-
+# Troubleshooting notes for correctly reading MIDI files
+# - In some songs, notes are present but not properly stored in Measure objects? Either way, score.recurse().notes will
+#   work instead.
+#
+# To-Fix
+# - Most songs need remade measures, but this breaks for Rosalina's observatory, because (for some reason) incorrect
+#   midi formatting creates extra measures. For this song, the applicable test results used remake_measures = False.
+#
 # To-Do
 # - Add more midi files and tests (both self-compare and cross-compare)
 # - Fix skyline algorithm to properly differentiate single parts with multiple voices
 #   - Use Dark Sanctuary as a guide, since I think it pushes every rule for this function
 # - Fix query_similar_skyline_leitmotif() function to not identify only part of a motif and then skip over it
-#   - Possibly includes
-
+#   - Alternatively, modify the Smith-Waterman algorithm to take the entire song as one input and then find all motifs
+#     concurrently.
+#
 # Future Goals
+# - Develop process for automatically identifying possible motifs, which will also build off the Smith-Waterman algorithm
 # - If the entire song repeats, cut it in half
 # - Create a script for automatically loading midi files into Musescore and re-downloading it (to fix formatting errors)
-
+#
 # To-Review
 # - Review what objects are actually needed for the song class
+# - OriginalNotes could  be consolidated as SimpleNotes (or vice versa, depending on how I want to code chords)
 
 
 # Notes
 # - .exec method for running string as code
 
+@dataclass
+class OriginalNote(object):
+    pitches: list[int]
+    duration: float = 0.0
+    measure_number: int = 0
+    total_onset: float = 0.0
+    local_onset: float = 0.0
+    tie: str | None = None
+    
+    def short_repr(self):
+        return "({0}, {1})".format(self.pitches, self.duration)
 
 @dataclass
 class SimpleNote(object):
@@ -59,6 +80,9 @@ class SimpleNote(object):
     
     # def __eq__(self, other):
     #     return self.pitch == other.pitch and self.note_duration == other.note_duration and self.tie == other.tie
+    
+    def short_repr(self):
+        return "({0}, {1})".format(self.pitch, self.duration)
     
 @dataclass
 class SimpleNotePrime(object):
@@ -75,7 +99,7 @@ class SimpleNotePrime(object):
 class Song(object):
     song_index: int
     song_name: str
-    original_notes_data: dict[str, list[list[GeneralNote]]]  #Full, original sequence grouped by measure
+    original_notes_data: dict[str, list[list[OriginalNote]]]  #Full, original sequence grouped by measure
     simple_notes_data: dict[str, list[list[SimpleNote]]]  #All notes without rests, grouped by chord (not measure)
     prime_notes_data: dict[str, list[list[list[SimpleNotePrime]]]]  #All prime note combinations, grouped by chord
     sky_simple_notes_data: dict[str, list[SimpleNote]]  #Skyline notes without rests
@@ -103,6 +127,13 @@ class Song(object):
         for part_name, sky_notes in self.sky_prime_notes_data.items():
             print(part_name)
             print_sky_notes(sky_notes)
+            
+    # Incomplete: Test out new print function to easily organize and compact simple note information
+    # Used for troubleshooting any midi formatting issues
+    # def nice_print_simple_notes_data(self):
+    #     for part_name, simple_notes_list in self.simple_notes_data.items():
+    
+    
 
 
 # Marks a phrase's start position in terms of song name, part name, measure, and note index of measure
@@ -157,24 +188,22 @@ class PhraseGroup(object):
 # Global Variables
 song_dict: dict[str, Song] = {}
 phrase_group_list: list[PhraseGroup] = []
+total_song_length: float = 0
 
-# Parameters
+# Changeable Parameters
 min_motif_length: int = 5
 
+def midi_to_notes_by_measure(midi_path, remake_measures=True):
+    """
+    Extracts notes and rests from a MIDI file organized by track (Part) and by measure
 
-def midi_to_measures(midi_path: str):
-    # Extracts notes and rests from a MIDI file organized by track (Part).
-    #
-    # Parameters:
-    #     midi_path (str): Path to the MIDI file.
-    #
-    # Returns:
-    #     dict: A dictionary where each key is a track name (or index)
-    #           and the value is a list of Measure objects.
+    :param str midi_path: path to MIDI file
+    :param bool remake_measures: specify if this function should remake measures according to the first time signature
+    :return: a dictionary where each key is the track name and the value is a list of Measure objects
+    """
     
     # Parse MIDI file
-    score = converter.parse(midi_path,  quarterLengthDivisors=(2, 3, 4, 8))
-    # score = score.explode()
+    score = converter.parse(midi_path)  # converter.parse(midi_path,  quarterLengthDivisors=(2, 3, 4, 8))
     
     # Prepare dictionary to store information
     midi_data = {}
@@ -183,27 +212,26 @@ def midi_to_measures(midi_path: str):
     time_signature: TimeSignature | None = None
     
     for i, part in enumerate(score.parts):
-        
         # Get track name from midi. If it doesn't have one, assign it based on the midi instrument
         part_name: str
         if part.partName and not part.partName.__contains__("Track"):
             part_name = part.partName
         else:
             part_name = part[music21.instrument.Instrument][0].__str__()
-            # print(part[music21.instrument.Instrument][0])
         
         if i == 0:
             time_signature = part[music21.meter.TimeSignature][0]
         else:
             part['Measure'][0].timeSignature = time_signature
-            
-        # Remake measures to account for new time signature
-        part = part.makeMeasures()
-
-        part = part.stripTies()
-        part = part.makeTies()
         
-        consolidateCompletedTuplets(part, onlyIfTied=False)
+        # If applicable, remake measures to account for new time signature
+        if remake_measures:
+            part = part.stripTies()
+            part = part.makeMeasures()
+            part = part.makeTies()
+            
+        # Get measure information
+        measure_offset_list = list(part.measureOffsetMap().keys())
         
         # Check for repetitive parts with same part_name, and rename them (for example, piano sometimes has two parts)
         same_track_number = 1
@@ -211,88 +239,124 @@ def midi_to_measures(midi_path: str):
             same_track_number += 1
             part_name = part_name + " " + same_track_number.__str__()
         
-        # Gets list of measures (syntax is weird because of OrderedDictionary shenanigans)
-        measure_list = []
-        temp = list(part.measureOffsetMap().values())
-        for measures_temp in temp:
-            measure = measures_temp[0]
-            
-            measure_list.append(measure)
-        midi_data[part_name] = measure_list
-
-    return midi_data
+        # Recurse notes and further organize notes by measure
+        organized_notes: list[list[OriginalNote]] = []
+        notes_iterator: StreamIterator[GeneralNote] = part.recurse().notesAndRests
+        for note in notes_iterator:
+            if not note.isRest:
+                pitches = [p.midi for p in note.pitches]
+                pitches.sort()
+                    
+                original_note = OriginalNote(pitches=pitches,
+                                             duration=note.quarterLength,
+                                             measure_number=note.measureNumber,
+                                             local_onset=note.offset,
+                                             total_onset=note.offset + measure_offset_list[note.measureNumber - 1])
+                
+                while len(organized_notes) < note.measureNumber:
+                    organized_notes.append([])
+                organized_notes[note.measureNumber - 1].append(original_note)
+        
+        # for measure in organized_notes:
+        #     combine_into_chords(measure)
+        
+        midi_data[part_name] = organized_notes
     
+    return midi_data
+
+def combine_into_chords(measure):
+    """
+    Music21 will divide notes with the same offset into different chords if they have different durations or velocities.
+    This function will combine notes into chords regardless of velocity (and in the process, setting every velocity to
+    80 for consistency). It will also combine notes into chords regardless of duration, reducing the longer note into
+    the shorter one, therefore combining all distinct voices into one voice. This simplifies the musical content, but
+    it shouldn't cause any issues.
+    
+    :param list[OriginalNote] measure:
+    :return:
+    """
+    
+    index = 0
+    for current_note in measure:
+        for check_index in range(index):
+            prev_note = measure[check_index]
+            if current_note.total_onset == prev_note.total_onset:
+                # Figure out which of the two is the shorter or longer note
+                if current_note.duration < prev_note.duration:
+                    shorter_note = current_note
+                    
+                    longer_note = prev_note
+                    index_to_remove = check_index
+                else:
+                    shorter_note = prev_note
+                    
+                    longer_note = current_note
+                    index_to_remove = index
+                
+                # Replace and remove respective notes
+                new_pitches = shorter_note.pitches + longer_note.pitches
+                new_pitches.sort()
+                shorter_note.pitches = new_pitches
+                measure.pop(index_to_remove)
+                
+                # Decrease index to account for removed note
+                index -= 1
+                break
+                
+        # Increment index
+        index += 1
 
 
-def measure_to_notes(measure: Measure):
-    # Flatten the stream to make sure we get all notes and rests
-    flat_notes = measure.flatten().notesAndRests
-    return flat_notes
+def notes_by_measure_to_simple_notes(notes_by_measure):
+    """
+    Inputs measures and outputs both simple_notes and sky_simple_notes. For both outputs, all rests are removed.
+    Measure number and offset are preserved by individual SimpleNote objects.
 
-
-def measures_to_notes_list(measures: list[Measure]):
-    general_notes_list: list[list[GeneralNote]] = []
-    for measure in measures:
-        flat_notes = measure_to_notes(measure)
-        general_notes_list.append(list(flat_notes))
-    return general_notes_list
-
-
-# Inputs measure and outputs both simple_notes and sky_simple_notes
-# For both outputs, all rests are removed
-# Measure number and offset is preserved by individual SimpleNote objects.
-def measures_to_simple_notes(measures: list[Measure]):
+    :param list[list[OriginalNote]] notes_by_measure: the original list of measures
+    :return: a tuple containing the simple_notes followed by the sky_simple_notes
+    """
+    
     simple_notes: list[list[SimpleNote]] = []
     sky_simple_notes: list[SimpleNote] = []
     
-    for measure in measures:
+    for measure in notes_by_measure:
         # Within a measure, identity the melody by the highest note currently being played (skyline algorithm)
         # Keep offset of skyline notes to avoid overlap
         local_sky_offset = 0
         note_measure_index = 0
-        for general_note in measure.notesAndRests:
-            # Ignores all rests
-            if not general_note.isRest:
-                # Identify if general note is a tied note or not
-                if general_note.tie is None:
-                    tie_type = None
-                else:
-                    tie_type = general_note.tie.type
-                    
-                # Temp: Ties seem to be broken in some midi files, so I'll try skipping all tie continuations.
-                # if tie_type.__eq__('Stop'):
-                #     continue
+        for original_note in measure:
+            # To-do: Identify if general note is a tied note or not
+            
+            # Temp: Ties seem to be broken in some midi files, so I'll try skipping all tie continuations.
+            # if tie_type.__eq__('Stop'):
+            #     continue
+            
+            # Make a SimpleNote object for each pitch in a chord. The sky note will always be the last element of the
+            # chord, since the pitches were previously sorted in ascending order
+            simple_note_chord: list[SimpleNote] = []
+            for pitch in original_note.pitches:
+                simple_note = SimpleNote(pitch=pitch,
+                                         duration=original_note.duration,
+                                         onset=original_note.total_onset,
+                                         measure_number=original_note.measure_number,
+                                         note_measure_index=note_measure_index)
+                simple_note_chord.append(simple_note)
+            
+            sky_simple_note = simple_note_chord[len(simple_note_chord) - 1]
+            
+            # Append sky_simple_note if there is no overlap
+            if original_note.local_onset >= local_sky_offset:
+                sky_simple_notes.append(sky_simple_note)
                 
-                # Get the highest pitch of chord or note
-                # At the same time, make a SimpleNote object for each pitch in a chord
-                pitch_list = [p.midi for p in general_note.pitches]
-                highest_pitch = 0
-                simple_note_chord: list[SimpleNote] = []
-                
-                sky_simple_note = None
-                for pitch in pitch_list:
-                    simple_note = SimpleNote(pitch=pitch, duration=general_note.quarterLength,
-                                             onset=(measure.offset + general_note.offset), measure_number=general_note.measureNumber,
-                                             note_measure_index=note_measure_index, tie=tie_type)
-                    simple_note_chord.append(simple_note)
-                    
-                    if pitch > highest_pitch:
-                        highest_pitch = pitch
-                        sky_simple_note = simple_note
-                
-                # Append sky_simple_note if there is no overlap
-                if general_note.offset >= local_sky_offset:
-                    sky_simple_notes.append(sky_simple_note)
-                    
-                    # Adjust offset and then add duration
-                    local_sky_offset = general_note.offset + general_note.quarterLength
-                
-                # Append simple_note_chord
-                simple_notes.append(simple_note_chord)
-                
-                # Increment note_measure_index
-                note_measure_index += 1
-                
+                # Adjust offset and then add duration
+                local_sky_offset = original_note.local_onset + original_note.duration
+            
+            # Append simple_note_chord
+            simple_notes.append(simple_note_chord)
+            
+            # Increment note_measure_index
+            note_measure_index += 1
+    
     # Reiterate through lists to define ioi
     for index in range(len(sky_simple_notes) - 1):
         sky_simple_notes[index].interonset_interval = sky_simple_notes[index + 1].onset - sky_simple_notes[index].onset
@@ -301,14 +365,14 @@ def measures_to_simple_notes(measures: list[Measure]):
         for note in simple_notes[chord_index]:
             check = note.duration + note.onset
             temp_index = chord_index + 1
-
+            
             while temp_index < len(simple_notes) and check > simple_notes[temp_index][0].onset:
                 temp_index += 1
             
             # Don't assign ioi if there is no next note in the sequence
             if temp_index < len(simple_notes):
                 note.interonset_interval = simple_notes[temp_index][0].onset - note.onset
-
+    
     return simple_notes, sky_simple_notes
 
 
@@ -321,7 +385,7 @@ def simples_sky_notes_to_prime_sky_notes(simple_sky_notes: list[SimpleNote]):
         prime_sky_notes.append(find_prime(current_note, next_note))
         
     return prime_sky_notes
-        
+    
 def simple_notes_to_prime_notes(simple_notes: list[list[SimpleNote]]):
     # Each note in simple_notes is made into a list of all its possible prime connections
     prime_notes: list[list[list[SimpleNotePrime]]] = []
@@ -342,7 +406,7 @@ def simple_notes_to_prime_notes(simple_notes: list[list[SimpleNote]]):
         
     return prime_notes
     
-        
+    
 def find_prime(current_note: SimpleNote, next_note: SimpleNote):
     a_interval = interval.Interval(next_note.pitch - current_note.pitch)
     #To-fix: Fix intervals to be only perfect, major, or minor
@@ -350,65 +414,11 @@ def find_prime(current_note: SimpleNote, next_note: SimpleNote):
     
     # Uses IOI if available. If not (because the note is at the end of the sequence), use its duration instead
     current_duration = current_note.interonset_interval if current_note.interonset_interval is not None else current_note.duration
+    
     next_duration = next_note.interonset_interval if next_note.interonset_interval is not None else next_note.duration
     onset_ratio = next_duration / current_duration
     
     return SimpleNotePrime(generic_interval, onset_ratio, current_note.measure_number, current_note.note_measure_index)
-
-
-# Flattens a list of lists into a singular list
-def flatten_list(measure_list):
-    flat_list = []
-    for measure in measure_list:
-        flat_list.extend(measure)
-    return flat_list
-    
-
-def calculate_dice_coefficient(measure_prime_1: list[SimpleNotePrime], measure_prime_2: list[SimpleNotePrime]):
-    intersection_set = list((Counter(measure_prime_1) & Counter(measure_prime_2)).elements())
-    
-    if len(measure_prime_1) == 0 or len(measure_prime_2) == 0:
-        return 0.0
-    else:
-        return 2 * len(intersection_set) / (len(measure_prime_1) + len(measure_prime_2))
-    
-# Takes two measure_prime objects and returns a similarity value between 0 and 1.
-# (Can switch between different available algorithms)
-def measure_of_similarity(measure_prime_1: list[SimpleNotePrime], measure_prime_2: list[SimpleNotePrime]):
-    value = calculate_dice_coefficient(measure_prime_1, measure_prime_2)
-    return value
-    
-
-def create_self_similarity_matrix(measures_prime: list[list[SimpleNotePrime]]) -> list[list[float]]:
-    length = len(measures_prime)
-    self_similarity_matrix = [[0.0 for i in range(length)] for j in range(length)]
-    for index1, measure1 in enumerate(measures_prime):
-        for index2, measure2 in enumerate(measures_prime):
-            self_similarity_matrix[index1][index2] = calculate_dice_coefficient(measure1, measure2)
-    return self_similarity_matrix
-
-
-def create_boolean_ssm(self_similarity_matrix: list[list[float]], threshold: float) -> list[list[bool]]:
-    boolean_ssm: list[list[bool]] = []
-    for row in self_similarity_matrix:
-        boolean_ssm.append([bool(x > threshold) for x in row])
-    return boolean_ssm
-
-# Create a lag matrix, which is a representation of a ssm where the diagonals are turned into rows
-# Only uses the bottom-left half of the ssm, since the other half is repeat information
-# TO-DO: Delete later
-def create_lag_matrix(boolean_ssm: list[list[bool]]):
-    size = len(boolean_ssm)
-    lag_matrix = [[False for i in range(size)] for j in range(size)]
-    for i in range(size):
-        for j in range(size):
-            if i+j < size:
-                lag_matrix[i][j] = boolean_ssm[i+j][j]
-            else:
-                break
-    return lag_matrix
-
-# def traverse_boolean_ssm(boolean_ssm: list[list[bool]]):
 
 
 def find_note_list_by_measure_range(simple_note_lists: list[list[SimpleNote]], measure_range: range):
@@ -476,22 +486,15 @@ def query_exact_leitmotif(query_phrase_group: PhraseGroup, current_song: Song):
             
     return found_query
 
-
-
-
-            
-            
-def create_song_object(midi_filepath: str, song_name:str, song_index: int):
-    midi_data = midi_to_measures(midi_filepath)
     
-    original_note_data: dict[str, list[list[GeneralNote]]] = {}
-    for part, measures in midi_data.items():
-        original_note_data[part] = measures_to_notes_list(measures)
+def create_song_object(midi_filepath: str, song_name:str, song_index: int):
+    # Change from True to False for testing
+    original_note_data = midi_to_notes_by_measure(midi_filepath, False)
     
     simple_notes_data: dict[str, list[list[SimpleNote]]] = {}
     sky_simple_notes_data: dict[str, list[SimpleNote]] = {}
-    for part, measures in midi_data.items():
-        simple_notes_data[part], sky_simple_notes_data[part] = measures_to_simple_notes(measures)
+    for part, measures in original_note_data.items():
+        simple_notes_data[part], sky_simple_notes_data[part] = notes_by_measure_to_simple_notes(measures)
     
     prime_notes_data: dict[str, list[list[list[SimpleNotePrime]]]] = {}
     for part, simple_notes_list in simple_notes_data.items():
@@ -506,7 +509,7 @@ def create_song_object(midi_filepath: str, song_name:str, song_index: int):
                 sky_simple_notes_data=sky_simple_notes_data, sky_prime_notes_data=sky_prime_notes_data)
     
     return song
-            
+    
 # Functions for testing
 def test_phrase_group():
     midi_filepath = "../../TestMidiFiles/Hollow Knight Main Theme.mid"
@@ -577,13 +580,21 @@ def note_to_string(general_note: GeneralNote):
         
     return txt
     
-def print_midi_data(midi_data: dict[str, list[Measure]]):
+def print_midi_data(midi_data: dict[str, list[list[GeneralNote]]]):
     for track, measures in midi_data.items():
         print(track)
         for measure_number, measure in enumerate(measures):
             print("Measure: " + (measure_number + 1).__str__())
-            for index, note in enumerate(measure.notesAndRests):
+            for index, note in enumerate(measure):
                 print(index.__str__() + " " + note_to_string(note))
+                
+def print_original_note_data(midi_data: dict[str, list[list[OriginalNote]]]):
+    for track, measures in midi_data.items():
+        print(track)
+        for measure_number, measure in enumerate(measures):
+            print("Measure: " + (measure_number + 1).__str__())
+            for index, note in enumerate(measure):
+                print(index.__str__() + " " + note.short_repr())
 
 
 def print_sky_notes(sky_notes: list[SimpleNote] | list[SimpleNotePrime]):
@@ -600,87 +611,22 @@ def print_prime_notes(prime_notes: list[list[list[SimpleNotePrime]]]):
     for chord_combinations in prime_notes:
         for note_combinations in chord_combinations:
             print(note_combinations.__repr__())
-                
-                
-def plot_colored_grid(data, song_name, part_name):
-    # Color for False and True
-    cmap = matplotlib.colors.ListedColormap(['black', 'white'])
-    
-    plt.rcParams['figure.dpi'] = 200
-    plt.rcParams['savefig.dpi'] = 200
-    plt.imshow(data, cmap=cmap)
-    plt.title("{0}: {1}".format(song_name, part_name))
-    plt.show()
-    
-    
-    
-def process_midi_file(midi_filepath: str, song_name: str, song_index: int):
-    # Create song object
-    song = create_song_object(midi_filepath, song_name, song_index)
-    
-    # Print self-similarity matrix for each part
-    track_ssm_list: list[list[list[float]]] = []
-    for part in list(song.sky_prime_notes_data.keys()):
-        self_similarity_matrix = create_self_similarity_matrix(song.sky_prime_notes_data[part])
-        track_ssm_list.append(self_similarity_matrix)
-
-    threshold: float = 0.7
-    boolean_ssm_list: list[list[list[bool]]] = []
-    for ssm in track_ssm_list:
-        boolean_ssm = create_boolean_ssm(ssm, threshold)
-        boolean_ssm_list.append(boolean_ssm)
-
-    lag_matrix_list: list[list[list[bool]]] = []
-    for boolean_ssm in boolean_ssm_list:
-        lag_matrix = create_lag_matrix(boolean_ssm)
-        lag_matrix_list.append(lag_matrix)
-    
-    song_name = os.path.basename(midi_filepath)
-    # - Uncomment to see SSM and Lag Matrix graphs
-    # song_name = "Space Junk Road"
-    # Draw First Graphs
-    # first_track = list(simple_midi_prime_data.keys())[0]
-    # plot_colored_grid(boolean_ssm_list[0], song_name, first_track)
-    # plot_colored_grid(lag_matrix_list[0], song_name, first_track)
-    
-    # Draw All Graphs
-    # for index, part in enumerate(list(simple_midi_prime_data.keys())):
-    #     plot_colored_grid(boolean_ssm_list[index], song_name, part)
-    #     plot_colored_grid(lag_matrix_list[index], song_name, part)
-    
-    #return simple_midi_data, lag_matrix_list
+            
 
 def print_midi_file():
-    midi_filepath = "../../TestMidiFiles/Hollow Knight Main Theme.mid"
-    midi_data = midi_to_measures(midi_filepath)
-    print_midi_data(midi_data)
+    midi_filepath = "../../TestMidiFiles/Super Mario Galaxy - Rosalinas Comet Observatory 1 2 3.mid"
+    original_note_data = midi_to_notes_by_measure(midi_filepath, True)
+    #print_original_note_data(original_note_data)
 
-
-def test_single_file():
-    midi_file = "../../MidiFiles/superMarioGalaxy/Super Mario Galaxy - Rosalinas Comet Observatory 1 2  3.mid"
-    process_midi_file(midi_file)
     
-    
-def test_multiple_files():
-    folder_name = "MidiFiles/superMarioGalaxy"
-    midi_files = []
-    for (dirpath, dirnames, filenames) in os.walk(folder_name):
-        midi_files.extend(filenames)
-    
-    for midi_file in midi_files:
-        process_midi_file(folder_name + "/" + midi_file)
-     
-     
 class EnhancedJSONEncoder(json.JSONEncoder):
     def default(self, o):
         if dataclasses.is_dataclass(o):
             return dataclasses.asdict(o)
         return super().default(o)
-        
-
-    
     
 
 if __name__ == "__main__":
     from src.motif_finder.tests import perform_all_tests
+    # print_midi_file()
     perform_all_tests()

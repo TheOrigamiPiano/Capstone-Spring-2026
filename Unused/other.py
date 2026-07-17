@@ -289,3 +289,32 @@ def process_phrase_dictionary():
     # json_str = json.dumps(phrase_dictionary, indent=4, cls=EnhancedJSONEncoder)
     # with open("SuperMarioGalaxy.json", "w") as f:
     #     f.write(json_str)
+
+
+# Unused
+def measure_to_notes(measure):
+	"""
+	Flatten the stream to make sure we get all notes and rests
+
+	:param Measure measure: the measure to flatten
+	:return: the flattened measure retaining all notes and rests
+	"""
+	
+	flat_notes = measure.flatten().notesAndRests
+	return flat_notes
+
+
+# Unused
+def measures_to_notes_list(measures):
+	"""
+	Convert a list of measures into a 2D list of notes (organized by measure)
+
+	:param list[Measure] measures: the list of measures to convert
+	:return: a 2D list of notes (organized by measure)
+	"""
+	
+	general_notes_list: list[list[GeneralNote]] = []
+	for measure in measures:
+		flat_notes = measure_to_notes(measure)
+		general_notes_list.append(list(flat_notes))
+	return general_notes_list
