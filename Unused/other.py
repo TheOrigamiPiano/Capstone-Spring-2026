@@ -318,3 +318,14 @@ def measures_to_notes_list(measures):
 		flat_notes = measure_to_notes(measure)
 		general_notes_list.append(list(flat_notes))
 	return general_notes_list
+
+
+def find_note_list_by_measure_range(simple_note_lists: list[list[SimpleNote]], measure_range: range):
+	note_list: list[SimpleNote] = []
+	for measure_number in measure_range:
+		# TO-FIX: Reduce range so that it can't (somehow) be outside of range
+		if measure_number >= len(simple_note_lists):
+			continue
+		
+		note_list.extend(simple_note_lists[measure_number])
+	return note_list

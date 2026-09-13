@@ -4,7 +4,14 @@ from main import PhrasePosition
 from main import Song
 from main import SimpleNote, MusicPhrase, create_song_object
 
+# Main functions for completing tests
 def perform_all_tests():
+	"""
+	Completes all self-compare and cross-compare tests
+	
+	:return:
+	"""
+	
 	#Self-compare tests
 	self_compare_tests()
 	
@@ -15,6 +22,12 @@ def perform_all_tests():
 	# temp_test()
 
 def perform_single_test():
+	"""
+	Performs only a single test. This is meant to be used for testing purposes, and the contents should be changed
+	depending on which song/motif needs to be tested.
+	
+	:return:
+	"""
 	# 4. Rosalina's Comet Observatory (Super Mario Galaxy)
 	print("\n4. Rosalina's Comet Observatory (Super Mario Galaxy)")
 	midi_filepath = "../../TestMidiFiles/Super Mario Galaxy - Rosalinas Comet Observatory 1 2 3.mid"
@@ -24,28 +37,14 @@ def perform_single_test():
 	
 	# With the extra measures caused by incorrect midi file, it starts on measure 12. The real measure is 9
 	perform_and_print_self_test(song, part, 9, 0, 11 - 1)
-	
-	
-def perform_and_print_self_test(song: Song, part: str, measure_number: int, measure_note_index: int, query_size: int):
-	phrase_group = retrieve_phrase(song, part, measure_number, measure_note_index, query_size)
-	query_similar_skyline_leitmotif(phrase_group, song)
-	
-	for music_phrase in phrase_group.music_phrase_list:
-		# print(str(len(music_phrase.prime_notes)) + " " + music_phrase.__repr__())
-		print(str(len(music_phrase.prime_notes)) + " " + music_phrase.positions.__repr__())
-
-
-def perform_and_print_cross_test(query_song: Song, part: str, measure_number: int, measure_note_index: int,
-								 query_size: int, target_song: Song):
-	query_phrase_group = retrieve_phrase(query_song, part, measure_number, measure_note_index, query_size)
-	query_similar_skyline_leitmotif(query_phrase_group, target_song)
-	
-	for music_phrase in query_phrase_group.music_phrase_list:
-		# print(str(len(music_phrase.prime_notes)) + " " + music_phrase.__repr__())
-		print(str(len(music_phrase.prime_notes)) + " " + music_phrase.positions.__repr__())
-
 
 def self_compare_tests():
+	"""
+	Self-compare tests are all the tests for finding repetitions of a motif within the song where the motif originated.
+	
+	:return:
+	"""
+	
 	# 1. My Castle Town (Deltarune)
 	# 1.1: Melody 1
 	print("1. My Castle Town (Deltarune)")
@@ -119,6 +118,14 @@ def self_compare_tests():
 	
 	
 def cross_compare_tests():
+	"""
+	Cross-compare tests are all the tests for finding repetitions of a motif within the different song other than the
+	one the motif originated in. Each test will include the one phrase group from its original song, and then all
+	further phrase groups will be from the different song.
+
+	:return:
+	"""
+	
 	# 1. My Castle Town in Dark Sanctuary (Deltarune)
 	print("\n1. My Castle Town in Dark Sanctuary (Deltarune)")
 	query_song_name = "My Castle Town"
@@ -175,6 +182,25 @@ def temp_test():
 		query_phrase_group.get_original_phrase().prime_notes, test_sequence)
 	print(similarity)
 
+# Print test results
+def perform_and_print_self_test(song: Song, part: str, measure_number: int, measure_note_index: int, query_size: int):
+	phrase_group = retrieve_phrase(song, part, measure_number, measure_note_index, query_size)
+	query_similar_skyline_leitmotif(phrase_group, song)
+	
+	for music_phrase in phrase_group.music_phrase_list:
+		# print(str(len(music_phrase.prime_notes)) + " " + music_phrase.__repr__())
+		print(str(len(music_phrase.prime_notes)) + " " + music_phrase.positions.__repr__())
+
+
+def perform_and_print_cross_test(query_song: Song, part: str, measure_number: int, measure_note_index: int,
+								 query_size: int, target_song: Song):
+	query_phrase_group = retrieve_phrase(query_song, part, measure_number, measure_note_index, query_size)
+	query_similar_skyline_leitmotif(query_phrase_group, target_song)
+	
+	for music_phrase in query_phrase_group.music_phrase_list:
+		# print(str(len(music_phrase.prime_notes)) + " " + music_phrase.__repr__())
+		print(str(len(music_phrase.prime_notes)) + " " + music_phrase.positions.__repr__())
+
 
 # Finds and retrieves a query specified by part, measure number, measure_note_index, and size
 # Note: Phrase must be found within the skyline part
@@ -199,5 +225,3 @@ def retrieve_phrase(song: Song, part: str, measure: int, measure_note_index: int
 	phrase_group = PhraseGroup([music_string])
 	
 	return phrase_group
-	
-	

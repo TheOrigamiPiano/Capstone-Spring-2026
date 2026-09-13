@@ -78,9 +78,6 @@ class SimpleNote(object):
     note_measure_index: int = 0  #Index of the note within a measure (similar to offset)
     tie: str | None = None
     
-    # def __eq__(self, other):
-    #     return self.pitch == other.pitch and self.note_duration == other.note_duration and self.tie == other.tie
-    
     def short_repr(self):
         return "({0}, {1})".format(self.pitch, self.duration)
     
@@ -190,15 +187,17 @@ song_dict: dict[str, Song] = {}
 phrase_group_list: list[PhraseGroup] = []
 total_song_length: float = 0
 
-# Changeable Parameters
+# Modifiable Parameters
 min_motif_length: int = 5
 
-def midi_to_notes_by_measure(midi_path, remake_measures=True):
+def midi_to_notes_by_measure(midi_path, remake_measures=False):
     """
     Extracts notes and rests from a MIDI file organized by track (Part) and by measure
 
     :param str midi_path: path to MIDI file
-    :param bool remake_measures: specify if this function should remake measures according to the first time signature
+    :param bool remake_measures: specify if this function should remake measures according to the main time signature
+    (in case time signature information is consistent throughout the piece but is incorrectly updated across the MIDI
+    parts). Defaults to false.
     :return: a dictionary where each key is the track name and the value is a list of Measure objects
     """
     
@@ -267,13 +266,12 @@ def midi_to_notes_by_measure(midi_path, remake_measures=True):
 def combine_into_chords(measure):
     """
     Music21 will divide notes with the same offset into different chords if they have different durations or velocities.
-    This function will combine notes into chords regardless of velocity (and in the process, setting every velocity to
-    80 for consistency). It will also combine notes into chords regardless of duration, reducing the longer note into
-    the shorter one, therefore combining all distinct voices into one voice. This simplifies the musical content, but
-    it shouldn't cause any issues.
+    This function will combine notes into chords regardless of velocity. It will also combine notes into chords
+    regardless of duration, reducing the longer note into the shorter one, therefore combining all distinct voices into
+    one voice. This simplifies the musical content, but it shouldn't cause any issues. All of these transformations
+    occur in place within the measure object.
     
-    :param list[OriginalNote] measure:
-    :return:
+    :param list[OriginalNote] measure: the measure to sift through and combine the applicable notes into chords
     """
     
     index = 0
@@ -376,7 +374,13 @@ def notes_by_measure_to_simple_notes(notes_by_measure):
     return simple_notes, sky_simple_notes
 
 
-def simples_sky_notes_to_prime_sky_notes(simple_sky_notes: list[SimpleNote]):
+def simples_sky_notes_to_prime_sky_notes(simple_sky_notes):
+    """
+    Transforms a list of sky notes into a list of prime sky notes, returning it as a new object.
+    
+    :param list[SimpleNote] simple_sky_notes: the list of simple sky notes
+    :return: a list of prime sky notes
+    """
     prime_sky_notes: list[SimpleNotePrime] = []
     
     for index in range(len(simple_sky_notes) - 1):
@@ -386,7 +390,15 @@ def simples_sky_notes_to_prime_sky_notes(simple_sky_notes: list[SimpleNote]):
         
     return prime_sky_notes
     
-def simple_notes_to_prime_notes(simple_notes: list[list[SimpleNote]]):
+def simple_notes_to_prime_notes(simple_notes):
+    """
+    Transforms a collection of note objects into a collection of prime note objects.
+    
+    :param list[list[SimpleNote]] simple_notes: all simple notes within the collection
+    :return: a collection of prime note objects. Order of lists from innermost to outermost goes: prime combinations for
+    one note to all notes within the next chord -> prime combinations for entire chord to the entire next chord -> all
+    sequential chord information for the entire song
+    """
     # Each note in simple_notes is made into a list of all its possible prime connections
     prime_notes: list[list[list[SimpleNotePrime]]] = []
     
@@ -407,7 +419,15 @@ def simple_notes_to_prime_notes(simple_notes: list[list[SimpleNote]]):
     return prime_notes
     
     
-def find_prime(current_note: SimpleNote, next_note: SimpleNote):
+def find_prime(current_note, next_note):
+    """
+    Calculate the pitch interval and IOI ratio between two sequential notes, and then return the respective
+    SimpleNotePrime object.
+    
+    :param SimpleNote current_note: The current note
+    :param SimpleNote next_note: The next note
+    :return: The SimpleNotePrime object created between both input notes
+    """
     a_interval = interval.Interval(next_note.pitch - current_note.pitch)
     #To-fix: Fix intervals to be only perfect, major, or minor
     generic_interval = a_interval.generic.directed
@@ -420,74 +440,16 @@ def find_prime(current_note: SimpleNote, next_note: SimpleNote):
     
     return SimpleNotePrime(generic_interval, onset_ratio, current_note.measure_number, current_note.note_measure_index)
 
-
-def find_note_list_by_measure_range(simple_note_lists: list[list[SimpleNote]], measure_range: range):
-    note_list: list[SimpleNote] = []
-    for measure_number in measure_range:
-        #TO-FIX: Reduce range so that it can't (somehow) be outside of range
-        if measure_number >= len(simple_note_lists):
-            continue
-        
-        note_list.extend(simple_note_lists[measure_number])
-    return note_list
     
-
-# Identify if a given leitmotif is in a song and where
-# Note: Song is provided as a single list of SimpleNotePrime objects (analyzing regardless of measures)
-# To-fix: Function doesn't take into account uneven chords
-def query_exact_leitmotif(query_phrase_group: PhraseGroup, current_song: Song):
-    query = query_phrase_group.get_original_phrase().prime_notes
-    found_query = False
+def create_song_object(midi_filepath, song_name, song_index):
+    """
+    Creates a song object given a midi_filepath and some other identifying information
     
-    for part_name, simple_note_primes in current_song.prime_notes_data.items():
-        note_part_index = 0
-        
-        while note_part_index < (len(simple_note_primes) - len(query)):
-            query_index = 0
-            
-            # First checks if a chord contains the query's first note
-            # After that, checks if the associated next note follows the query sequence
-            follow_note = True
-            next_note_index: int | None = None
-            while query_index < len(query) and follow_note:
-                follow_note = False
-                chord_combinations = simple_note_primes[note_part_index + query_index]
-                if next_note_index is None:
-                    for note_combinations in chord_combinations:
-                        for note_combination in note_combinations:
-                            if query[query_index].compare_note(note_combination):
-                                follow_note = True
-                                next_note_index = note_combinations.index(note_combination)
-                else:
-                    for note_combination in chord_combinations[next_note_index]:
-                        if query[query_index].compare_note(note_combination):
-                            follow_note = True
-                            next_note_index = chord_combinations[next_note_index].index(note_combination)
-                
-                query_index += 1
-                
-            # Found a match to the query
-            if query_index == len(query):
-                found_query = True
-                
-                # Create new PhrasePosition
-                start_note = simple_note_primes[note_part_index][0][0]
-                new_phrase_position = PhrasePosition(current_song.song_name, part_name, start_note.measure_number,
-                                                     start_note.note_measure_index)
-                
-                # Update phrase group (unless new_phrase_position is already present)
-                if new_phrase_position not in query_phrase_group.get_original_phrase().positions:
-                    query_phrase_group.get_original_phrase().update(new_phrase_position)
-                
-                # Increment note index past successful query
-                note_part_index += len(query)
-            
-            note_part_index += 1
-            
-    return found_query
-
-    
-def create_song_object(midi_filepath: str, song_name:str, song_index: int):
+    :param str midi_filepath: the path to the midi file
+    :param str song_name: the name of the song
+    :param int song_index: the index of the song within its soundtrack
+    :return: a song object for the given midi file
+    """
     # Change from True to False for testing
     original_note_data = midi_to_notes_by_measure(midi_filepath, False)
     
@@ -509,41 +471,6 @@ def create_song_object(midi_filepath: str, song_name:str, song_index: int):
                 sky_simple_notes_data=sky_simple_notes_data, sky_prime_notes_data=sky_prime_notes_data)
     
     return song
-    
-# Functions for testing
-def test_phrase_group():
-    midi_filepath = "../../TestMidiFiles/Hollow Knight Main Theme.mid"
-    song_name = "Hollow Knight Main Theme"
-    song_index = 0
-    
-    song = create_song_object(midi_filepath, song_name, song_index)
-    
-    # for part, simple_chords in song.simple_notes_data.items():
-    #     print(part)
-    #     for simple_chord in simple_chords:
-    #         for simple_note in simple_chord:
-    #             print(simple_note.__repr__())
-    
-    # Grabs first motif in Hollow Knight Main Theme
-    query_measure = 0
-    query_note_measure_index = 0
-    query_size = 11-1
-    
-    # Searches through first part only
-    first_part = next(iter(song.sky_prime_notes_data))
-    start_note = song.sky_prime_notes_data[first_part][query_note_measure_index]
-    motif_sequence = song.sky_prime_notes_data[first_part][query_note_measure_index:query_size]
-    
-    # Create relevant objects
-    phrase_position = PhrasePosition(song.song_name, first_part, start_note.measure_number, start_note.note_measure_index)
-    music_string = MusicPhrase(motif_sequence, 1, [phrase_position])
-    phrase_group = PhraseGroup([music_string])
-    
-    query_exact_leitmotif(phrase_group, song)
-    
-    # print(phrase_group.__repr__())
-    # print(song.simple_notes_data.__repr__())
-    # print(song.prime_notes_data.__repr__())
     
 def test_song():
     midi_filepath = "../../TestMidiFiles/Deltarune - My Castle Town.mid"
